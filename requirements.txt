@@ -1,6 +1,6 @@
-ccxt
-pandas
-numpy
-python-telegram-bot[job-queue]
-python-dotenv
-nest_asyncio
+ccxt==4.5.58
+pandas==3.0.3
+numpy==2.4.6
+python-telegram-bot[job-queue]==22.8
+python-dotenv==1.2.2
+nest_asyncio==1.6.0

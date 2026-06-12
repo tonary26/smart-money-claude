@@ -1,0 +1,12 @@
+.env
+.deps/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.idea/
+.vscode/
+.dual-graph/
+.impeccable/
+.pytest_cache/
+.worktrees/

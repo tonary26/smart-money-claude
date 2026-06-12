@@ -1,0 +1,14 @@
+services:
+  bot:
+    build:
+      context: .
+    image: smc-full-bot:latest
+    env_file:
+      - .env
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    volumes:
+      - type: bind
+        source: ./coins.json
+        target: /app/coins.json
