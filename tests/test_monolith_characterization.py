@@ -19,7 +19,7 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "987654")
 
 import pandas as pd
 
-import bot
+from smc_bot import analysis, app, config, exchange, handlers, simulation, watchlist
 
 
 class FixedDatetime(datetime):
@@ -62,10 +62,10 @@ class ConfigurationTests(unittest.TestCase):
         }
 
         for name, expected in expected_constants.items():
-            self.assertEqual(getattr(bot, name), expected)
+            self.assertEqual(getattr(config, name), expected)
 
         self.assertEqual(
-            bot.DEFAULT_COINS,
+            config.DEFAULT_COINS,
             [
                 "BTCUSDT",
                 "ETHUSDT",
@@ -89,48 +89,48 @@ class ConfigurationTests(unittest.TestCase):
                 "Нет переменных: BYBIT_API_KEY, BYBIT_API_SECRET, "
                 "TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID",
             ):
-                bot._check_env()
+                config._check_env()
 
 
 class WatchlistTests(unittest.TestCase):
     def test_missing_file_creates_existing_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "coins.json"
-            with patch.object(bot, "COINS_FILE", path):
-                result = bot.load_coins()
+            with patch.object(watchlist, "COINS_FILE", path):
+                result = watchlist.load_coins()
 
-            self.assertEqual(result, bot.DEFAULT_COINS)
-            self.assertEqual(json.loads(path.read_text()), sorted(bot.DEFAULT_COINS))
+            self.assertEqual(result, config.DEFAULT_COINS)
+            self.assertEqual(json.loads(path.read_text()), sorted(config.DEFAULT_COINS))
 
     def test_invalid_file_falls_back_to_defaults(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "coins.json"
             path.write_text("{invalid")
-            with patch.object(bot, "COINS_FILE", path):
-                result = bot.load_coins()
+            with patch.object(watchlist, "COINS_FILE", path):
+                result = watchlist.load_coins()
 
-            self.assertEqual(result, bot.DEFAULT_COINS)
+            self.assertEqual(result, config.DEFAULT_COINS)
 
     def test_add_and_remove_keep_existing_normalization_and_messages(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "coins.json"
             path.write_text('["BTCUSDT"]')
 
-            with patch.object(bot, "COINS_FILE", path):
+            with patch.object(watchlist, "COINS_FILE", path):
                 self.assertEqual(
-                    bot.add_coin(" eth "),
+                    watchlist.add_coin(" eth "),
                     (True, "ETHUSDT добавлен ✅"),
                 )
                 self.assertEqual(
-                    bot.add_coin("ethusdt"),
+                    watchlist.add_coin("ethusdt"),
                     (False, "ETHUSDT уже в списке"),
                 )
                 self.assertEqual(
-                    bot.remove_coin("btc"),
+                    watchlist.remove_coin("btc"),
                     (True, "BTCUSDT удалён ✅"),
                 )
                 self.assertEqual(
-                    bot.remove_coin("btc"),
+                    watchlist.remove_coin("btc"),
                     (False, "BTCUSDT не найден в списке"),
                 )
 
@@ -144,7 +144,7 @@ class AnalysisFunctionTests(unittest.TestCase):
             "low": list(range(9, 25)),
             "close": list(range(10, 26)),
         })
-        self.assertEqual(bot.calc_atr(atr_df), 2.0)
+        self.assertEqual(analysis.calc_atr(atr_df), 2.0)
 
         swing_df = pd.DataFrame({
             "ts": pd.date_range("2026-01-01", periods=5, freq="h"),
@@ -152,16 +152,16 @@ class AnalysisFunctionTests(unittest.TestCase):
             "low": [5, 4, 1, 4, 5],
         })
         self.assertEqual(
-            bot.get_swing_highs(swing_df, 2),
+            analysis.get_swing_highs(swing_df, 2),
             [{"idx": 2, "price": 5, "ts": swing_df["ts"].iloc[2]}],
         )
         self.assertEqual(
-            bot.get_swing_lows(swing_df, 2),
+            analysis.get_swing_lows(swing_df, 2),
             [{"idx": 2, "price": 1, "ts": swing_df["ts"].iloc[2]}],
         )
 
     def test_level_calculation_is_pinned(self):
-        levels = bot.calc_levels(
+        levels = analysis.calc_levels(
             "LONG",
             100,
             {"low": 95, "high": 101},
@@ -238,8 +238,8 @@ class AnalysisFunctionTests(unittest.TestCase):
             "🕐 12.06 10:20 UTC"
         )
 
-        with patch.object(bot, "datetime", FixedDatetime):
-            actual = bot.format_signal(
+        with patch.object(analysis, "datetime", FixedDatetime):
+            actual = analysis.format_signal(
                 "BTCUSDT",
                 "LONG",
                 "BULLISH",
@@ -256,10 +256,10 @@ class AnalysisFunctionTests(unittest.TestCase):
 
 class SimulationTests(unittest.TestCase):
     def test_dataclass_defaults_and_simulation_message_are_exact(self):
-        self.assertEqual(bot.ScenA().prob, 0.5)
-        self.assertEqual(bot.ScenB().triggered, False)
+        self.assertEqual(simulation.ScenA().prob, 0.5)
+        self.assertEqual(simulation.ScenB().triggered, False)
 
-        simulation = bot.Simulation(
+        current_simulation = simulation.Simulation(
             symbol="BTCUSDT",
             direction="LONG",
             created=datetime(2026, 6, 12, 10, 0, 0),
@@ -267,7 +267,7 @@ class SimulationTests(unittest.TestCase):
             zone={},
             liquidity={},
             atr=1.25,
-            sa=bot.ScenA(
+            sa=simulation.ScenA(
                 zone_h=101.0,
                 zone_l=99.0,
                 zone_mid=100.0,
@@ -275,7 +275,7 @@ class SimulationTests(unittest.TestCase):
                 ret_pct=50.0,
                 prob=0.6,
             ),
-            sb=bot.ScenB(
+            sb=simulation.ScenB(
                 sweep_tgt=97.0,
                 depth_atr=0.8,
                 entry_ret=99.0,
@@ -285,7 +285,7 @@ class SimulationTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            bot.format_simulation_msg("BTCUSDT", simulation),
+            simulation.format_simulation_msg("BTCUSDT", current_simulation),
             "🧠 *Симуляция запущена* — BTCUSDT\n\n"
             "🟢 Направление: *LONG*\n"
             "ATR(14): `1.25`\n\n"
@@ -301,34 +301,47 @@ class SimulationTests(unittest.TestCase):
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
-    def test_constructor_uses_existing_bybit_and_telegram_arguments(self):
-        exchange = object()
-        telegram_bot = object()
+    def test_exchange_factory_uses_existing_bybit_arguments(self):
+        expected_exchange = object()
 
-        with (
-            patch.object(bot, "_check_env") as check_env,
-            patch.object(bot.ccxt, "bybit", return_value=exchange) as bybit,
-            patch.object(bot.telegram, "Bot", return_value=telegram_bot) as tg,
-            patch.object(bot, "load_coins", return_value=["BTCUSDT"]),
-            patch("builtins.print"),
-        ):
-            instance = bot.SMCFullBot()
+        with patch.object(
+            exchange.ccxt,
+            "bybit",
+            return_value=expected_exchange,
+        ) as bybit:
+            result = exchange.create_exchange()
 
-        check_env.assert_called_once_with()
         bybit.assert_called_once_with({
             "apiKey": os.getenv("BYBIT_API_KEY"),
             "secret": os.getenv("BYBIT_API_SECRET"),
             "enableRateLimit": True,
             "options": {"defaultType": "future"},
         })
+        self.assertIs(result, expected_exchange)
+
+    def test_constructor_uses_existing_bybit_and_telegram_arguments(self):
+        exchange_client = object()
+        telegram_bot = object()
+
+        with (
+            patch.object(app, "_check_env") as check_env,
+            patch.object(app, "create_exchange", return_value=exchange_client) as create_exchange,
+            patch.object(app.telegram, "Bot", return_value=telegram_bot) as tg,
+            patch.object(app, "load_coins", return_value=["BTCUSDT"]),
+            patch("builtins.print"),
+        ):
+            instance = app.SMCFullBot()
+
+        check_env.assert_called_once_with()
+        create_exchange.assert_called_once_with()
         tg.assert_called_once_with(token=os.getenv("TELEGRAM_BOT_TOKEN"))
-        self.assertIs(instance.exchange, exchange)
+        self.assertIs(instance.exchange, exchange_client)
         self.assertIs(instance.tg, telegram_bot)
         self.assertEqual(instance.last_signals, {})
         self.assertEqual(instance.active_sims, {})
 
     async def test_command_replies_are_exact(self):
-        instance = object.__new__(bot.SMCFullBot)
+        instance = object.__new__(app.SMCFullBot)
 
         update = make_update()
         await instance.cmd_add(update, SimpleNamespace(args=[]))
@@ -337,7 +350,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
 
         update = make_update()
-        with patch.object(bot, "load_coins", return_value=["ETHUSDT", "BTCUSDT"]):
+        with patch.object(handlers, "load_coins", return_value=["ETHUSDT", "BTCUSDT"]):
             await instance.cmd_list(update, SimpleNamespace())
         update.message.reply_text.assert_awaited_once_with(
             "📋 Монет в списке: 2\n\n• BTCUSDT\n• ETHUSDT"
@@ -351,7 +364,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_run_keeps_startup_message_handler_order_and_polling(self):
-        instance = object.__new__(bot.SMCFullBot)
+        instance = object.__new__(app.SMCFullBot)
         instance.token = os.getenv("TELEGRAM_BOT_TOKEN")
         instance.send = AsyncMock()
         instance._scan_loop = AsyncMock()
@@ -366,13 +379,13 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         builder.build.return_value = application
 
         with (
-            patch.object(bot.Application, "builder", return_value=builder),
+            patch.object(app.Application, "builder", return_value=builder),
             patch.object(
-                bot,
+                app,
                 "CommandHandler",
                 side_effect=lambda command, callback: (command, callback),
             ),
-            patch.object(bot, "load_coins", return_value=["BTCUSDT"]),
+            patch.object(app, "load_coins", return_value=["BTCUSDT"]),
             patch("builtins.print"),
         ):
             await instance.run()

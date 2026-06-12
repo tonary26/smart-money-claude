@@ -1,0 +1,1 @@
+"""SMC Full Bot package."""
